@@ -12,6 +12,9 @@ import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:intl/intl.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:hold_down_button/hold_down_button.dart';
+import 'dart:async';
+import 'dart:convert' show jsonDecode;
+import 'package:http/http.dart' as http;
 
 class Dashboard extends StatefulWidget {
   const Dashboard({Key? key}) : super(key: key);
@@ -21,7 +24,7 @@ class Dashboard extends StatefulWidget {
 }
 
 class DashboardState extends State<Dashboard> {
-  Timer? timer;
+  Timer? timer, timer2;
   TimeOfDay _time = TimeOfDay(hour: 0, minute: 0);
   TimeOfDay _duration = TimeOfDay(hour: 0, minute: 0);
   TimeOfDay _stopAt = TimeOfDay(hour: 0, minute: 0);
@@ -31,9 +34,11 @@ class DashboardState extends State<Dashboard> {
   String _lastWords = '';
   DateTime now = DateTime.now();
   int timerDoneRunning = 0;
-  int sensorGas = 5;
+  double sensorGas = 0.00;
   bool sensorApi = false;
+  List<TextEditingController> _data = [TextEditingController()];
 
+  
   void _selectTime() async {
     final TimeOfDay? newTime = await showTimePicker(
       context: context,
@@ -67,9 +72,77 @@ class DashboardState extends State<Dashboard> {
   void initState() {
     super.initState();
     timer = Timer.periodic(Duration(milliseconds: 100), (Timer t) => updateValue());
+    timer2 = Timer.periodic(Duration(milliseconds: 500), (Timer t) => updateValue2());
     _initSpeech();
+    setState(() {
+        _data[0].text = "0.0.0.0";
+    });
     super.initState();
   }
+
+  void updateValue2() async {
+    if(_data[0].text.length > 8){
+
+        var url = Uri.parse("http://${_data[0].text}/getValue");
+          try{
+              final response = await http.get(url).timeout(
+              const Duration(seconds: 1),
+              onTimeout: () {
+                // Time has run out, do what you wanted to do.
+                return http.Response('Error', 408); // Request Timeout response status code
+              },
+            );
+            print(response.statusCode);
+          // context.loaderOverlay.hide();
+            if (response.statusCode == 200) {
+              
+              var respon = Json.tryDecode(response.body);
+              print(respon["value"][1]);
+              if (this.mounted) {
+                setState(() {
+                  sensorGas = respon["value"][0];
+                  if(respon["value"][1] == 0) stoveState = false;
+                  else stoveState = true;
+                  if(respon["value"][2] == 0) sensorApi = true;
+                  else sensorApi = false;
+                });
+              }
+            }
+          } on Exception catch (_) {
+            // rethrow;
+          }
+      }
+    }
+    
+    void nyalakan_kompor() async {
+      if(_data[0].text.length > 8){
+          var url = Uri.parse("http://${_data[0].text}/change?state=1");
+            try{
+                final response = await http.get(url).timeout(
+                const Duration(seconds: 1),
+                onTimeout: () {
+                  // Time has run out, do what you wanted to do.
+                  return http.Response('Error', 408); // Request Timeout response status code
+                },
+              );
+            } on Exception catch (_) {}
+        }
+      }
+      
+    void matikan_kompor() async {
+      if(_data[0].text.length > 8){
+          var url = Uri.parse("http://${_data[0].text}/change?state=0");
+            try{
+                final response = await http.get(url).timeout(
+                const Duration(seconds: 1),
+                onTimeout: () {
+                  // Time has run out, do what you wanted to do.
+                  return http.Response('Error', 408); // Request Timeout response status code
+                },
+              );
+            } on Exception catch (_) {}
+        }
+      }
 
   void updateValue() async {
     var end_hour = _time.hour + _duration.hour;
@@ -89,6 +162,7 @@ class DashboardState extends State<Dashboard> {
     if(timerDoneRunning == 1 && start.isAfter(end)){
       print("Timer Running");
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Timer Berjalan")));
+      nyalakan_kompor();
       setState((){
         timerDoneRunning = 2;
         stoveState = true;
@@ -98,10 +172,12 @@ class DashboardState extends State<Dashboard> {
       if(start.isAfter(end2)){
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Timer Berhenti")));
         print("Timer Stopped");
+        matikan_kompor();
         setState((){
           timerDoneRunning = 0;
           stoveState = false;
         });
+        
       }
     }
     
@@ -144,12 +220,15 @@ class DashboardState extends State<Dashboard> {
   void _onSpeechResult(SpeechRecognitionResult result) {
     if(result.recognizedWords.toUpperCase() == "NYALAKAN KOMPOR"){
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Menjalankan Perintah : " + result.recognizedWords)));
+      nyalakan_kompor();
       setState(() {
         stoveState = true;
       });
+      
     }
     else if(result.recognizedWords.toUpperCase() == "MATIKAN KOMPOR"){
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Menjalankan Perintah : " + result.recognizedWords)));
+      matikan_kompor();
       setState(() {
         stoveState = false;
       });
@@ -178,6 +257,7 @@ class DashboardState extends State<Dashboard> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset : false,
       appBar: AppBar(
         title: const Text('SMART STOVE',
                   style: TextStyle(color: Colors.white),
@@ -219,17 +299,30 @@ class DashboardState extends State<Dashboard> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-              Padding(padding: EdgeInsets.all(10)),
-              Text("Sekarang Jam = " +  (now.hour < 10 ? "0" : "") + now.hour.toString() + ":" +  (now.minute < 10 ? "0" : "") + now.minute.toString() + ":" +  (now.second < 10 ? "0" : "") + now.second.toString()),
-              Padding(padding: EdgeInsets.all(10)),
+            Container(
+              padding: EdgeInsets.all(5),
+              child: 
+                TextField(
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'IP Endpoint',
+                        labelStyle: TextStyle(fontSize: 20),
+                      ),
+                      controller: _data[0],
+                    ),
+              ),
               Divider(color: Colors.black),
-              Padding(padding: EdgeInsets.all(10)),
+              Padding(padding: EdgeInsets.all(6)),
+              Text("Sekarang Jam = " +  (now.hour < 10 ? "0" : "") + now.hour.toString() + ":" +  (now.minute < 10 ? "0" : "") + now.minute.toString() + ":" +  (now.second < 10 ? "0" : "") + now.second.toString()),
+              Padding(padding: EdgeInsets.all(6)),
+              Divider(color: Colors.black),
+              Padding(padding: EdgeInsets.all(6)),
               Text("Kompor Status = " + (stoveState ? "ON" : "OFF")),
               Text("Sensor GAS  = " + sensorGas.toString() + " ppm"),
               Text("Sensor Api = " + (sensorApi ? "Ada Api" : "Tidak Ada Api")),
-              Padding(padding: EdgeInsets.all(10)),
+              Padding(padding: EdgeInsets.all(6)),
               Divider(color: Colors.black),
-              Padding(padding: EdgeInsets.all(10)),
+              Padding(padding: EdgeInsets.all(6)),
               ElevatedButton(
                 onPressed: _selectTime,
                 child: Text('SET JAM KOMPOR AKTIF',
@@ -246,9 +339,9 @@ class DashboardState extends State<Dashboard> {
               ),
               Padding(padding: EdgeInsets.all(5)),
               Text("Kompor aktif di jam = " + (_time.hour < 10 ? "0" : "") + _time.hour.toString() + ":" + (_time.minute < 10 ? "0" : "") + _time.minute.toString()),
-              Padding(padding: EdgeInsets.all(10)),
+              Padding(padding: EdgeInsets.all(6)),
               Divider(color: Colors.black),
-              Padding(padding: EdgeInsets.all(10)),
+              Padding(padding: EdgeInsets.all(6)),
               ElevatedButton(
                 onPressed: _selectTime2,
                 child: Text('SET TIMER KOMPOR',
@@ -267,12 +360,12 @@ class DashboardState extends State<Dashboard> {
               Text("Timer kompor = " + (_duration.hour < 10 ? "0" : "") + _duration.hour.toString() + ":" + (_duration.minute < 10 ? "0" : "") + _duration.minute.toString()),
               Padding(padding: EdgeInsets.all(5)),
               Divider(color: Colors.black),
-              Padding(padding: EdgeInsets.all(10)),
+              Padding(padding: EdgeInsets.all(6)),
               Text("Kompor mati di jam = " + (_stopAt.hour < 10 ? "0" : "") + _stopAt.hour.toString() + ":" + (_stopAt.minute < 10 ? "0" : "") + _stopAt.minute.toString()),
               Text("Timer telah selesai berjalan = " + (timerDoneRunning > 0 ? "Belum" : "Sudah")),
-              Padding(padding: EdgeInsets.all(10)),
+              Padding(padding: EdgeInsets.all(6)),
               Divider(color: Colors.black),
-              Padding(padding: EdgeInsets.all(10)),
+              Padding(padding: EdgeInsets.all(6)),
                 // Text(
                 //   // If listening is active show the recognized words
                 //   _speechToText.isListening
@@ -315,5 +408,23 @@ class DashboardState extends State<Dashboard> {
           ),
       ),
     );
+  }
+}
+
+class Json {
+  static String? tryEncode(data) {
+    try {
+      return jsonEncode(data);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  static dynamic tryDecode(data) {
+    try {
+      return jsonDecode(data);
+    } catch (e) {
+      return null;
+    }
   }
 }
