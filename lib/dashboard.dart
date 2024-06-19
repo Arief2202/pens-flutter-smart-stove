@@ -42,8 +42,8 @@ class DashboardState extends State<Dashboard> {
   DateTime now = DateTime.now();
   int timerDoneRunning = 0;
   bool stoveState = false;
-  int sensorGas = 0;
-  int sensorGas2 = 0;
+  double sensorGas = 0.00;
+  double sensorGas2 = 0.00;
   bool sensorApi = false;
   bool kebocoran = false;
   String lastUpdatedData = '';
@@ -182,16 +182,6 @@ class DashboardState extends State<Dashboard> {
       // context.loaderOverlay.hide();
       if (response.statusCode == 200) {
         var respon = Json.tryDecode(response.body);
-        if (this.mounted) {
-          setState(() {            
-            stoveState = respon['data']['stove_status'] == '1' ? true : false;
-            sensorGas = int.parse(respon['data']['sensor_1']);
-            sensorGas2 = int.parse(respon['data']['sensor_2']);
-            sensorApi = respon['data']['sensor_fire'] == '1' ? true : false;
-            kebocoran = respon['data']['bocor'] == '1' ? true : false;
-            lastUpdatedData = respon['data']['created_at'];
-          });
-        }
         if(respon['notifs'].length > 0){
           for(int a=0; a<respon['notifs'].length; a++){
             notif.showNotif(
@@ -209,36 +199,16 @@ class DashboardState extends State<Dashboard> {
             );
           }
         }
-        // if (respon['notifs']['notif']['show']) {
-        //   notif.showNotif(
-        //       id: respon['mq4']['notif']['id'],
-        //       head: respon['mq4']['notif']['header'],
-        //       body: respon['mq4']['notif']['body'],
-        //       fln: flutterLocalNotificationsPlugin);
-        //   await http.post(
-        //     Uri.parse("http://${globals.endpoint}/updateNotif"),
-        //     headers: <String, String>{
-        //       'Content-Type':
-        //           'application/x-www-form-urlencoded; charset=UTF-8',
-        //     },
-        //     body: "sensor=MQ4",
-        //   );
-        // }
-        // if (respon['mq7']['notif']['show']) {
-        //   notif.showNotif(
-        //       id: respon['mq7']['notif']['id'],
-        //       head: respon['mq7']['notif']['header'],
-        //       body: respon['mq7']['notif']['body'],
-        //       fln: flutterLocalNotificationsPlugin);
-        //   await http.post(
-        //     Uri.parse("http://${globals.endpoint}/updateNotif"),
-        //     headers: <String, String>{
-        //       'Content-Type':
-        //           'application/x-www-form-urlencoded; charset=UTF-8',
-        //     },
-        //     body: "sensor=MQ7",
-        //   );
-        // }
+        if (this.mounted) {
+          setState(() {            
+            stoveState = respon['data']['stove_status'] == '1' ? true : false;
+            sensorGas = double.parse(respon['data']['sensor_1']);
+            sensorGas2 = double.parse(respon['data']['sensor_2']);
+            sensorApi = respon['data']['sensor_fire'] == '1' ? true : false;
+            kebocoran = respon['data']['bocor'] == '1' ? true : false;
+            lastUpdatedData = respon['data']['created_at'];
+          });
+        }
       }
     } on Exception catch (_) {
       // rethrow;
